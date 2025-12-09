@@ -225,13 +225,13 @@ async def create_booking(
     booking_in: schemas.BookingCreate,
 ) -> Optional[models.Booking]:
     # // транзакция: используем row-level locking для предотвращения race condition
+    # // исправление: убран joinedload для избежания ошибки "FOR UPDATE cannot be applied to the nullable side of an outer join"
     try:
-        # // конкурентный доступ: SELECT FOR UPDATE блокирует слот до конца транзакции
+        # // конкурентный доступ: SELECT FOR UPDATE блокирует только Slot без JOIN
         stmt = (
             select(models.Slot)
-            .options(joinedload(models.Slot.place).joinedload(models.Place.zone))
             .where(models.Slot.id == booking_in.slot_id)
-            .with_for_update()  # // row-level lock для атомарности
+            .with_for_update()  # // row-level lock только на Slot
         )
         result = await session.execute(stmt)
         slot = result.scalar_one_or_none()
@@ -239,6 +239,14 @@ async def create_booking(
             return None
         if not slot.is_available:
             return None
+        
+        # // загружаем place и zone отдельно, после блокировки Slot
+        place = None
+        zone = None
+        if slot.place_id:
+            place = await session.get(models.Place, slot.place_id)
+            if place and place.zone_id:
+                zone = await session.get(models.Zone, place.zone_id)
         stmt = select(models.Booking).where(
             and_(
                 models.Booking.user_id == user_id,
@@ -258,7 +266,7 @@ async def create_booking(
         )
         if has_conflict:
             return None
-        zone = slot.place.zone if slot.place else None
+        # // используем уже загруженную zone для проверки вместимости
         if zone:
             can_book = await check_zone_capacity(
                 session=session,
@@ -474,13 +482,13 @@ async def cancel_booking(
     is_admin: bool = False,
 ) -> Optional[models.Booking]:
     # // транзакция и конкурентный доступ: используем SELECT FOR UPDATE для атомарности отмены
+    # // исправление: убран joinedload для избежания ошибки "FOR UPDATE cannot be applied to the nullable side of an outer join"
     try:
-        # // конкурентный доступ: блокируем бронирование на чтение/изменение
+        # // конкурентный доступ: блокируем только Booking без JOIN, чтобы избежать OUTER JOIN + FOR UPDATE
         stmt = (
             select(models.Booking)
-            .options(joinedload(models.Booking.slot))
             .where(models.Booking.id == booking_id)
-            .with_for_update()  # // row-level lock
+            .with_for_update()  # // row-level lock только на Booking
         )
         result = await session.execute(stmt)
         booking = result.scalar_one_or_none()
@@ -492,9 +500,14 @@ async def cancel_booking(
             return None
         if booking.status != "active":
             return booking
+        
+        # // загружаем slot отдельно, после блокировки Booking
+        if booking.slot_id:
+            slot = await session.get(models.Slot, booking.slot_id)
+            if slot:
+                slot.is_available = True
+        
         booking.status = "cancelled"
-        if booking.slot:
-            booking.slot.is_available = True
         # // транзакция: commit гарантирует атомарность операции
         await session.commit()
         await session.refresh(booking)
@@ -507,7 +520,6 @@ async def cancel_booking(
         # // обработка ошибок БД
         await session.rollback()
         return None
-    return booking
 
 async def get_booking_history(
     session: AsyncSession,
@@ -570,13 +582,13 @@ async def extend_booking(
     extend_minutes: int = 0,
 ) -> models.Booking:
     # // транзакция и конкурентный доступ: оборачиваем в try-except для обработки IntegrityError
+    # // исправление: убран joinedload для избежания ошибки "FOR UPDATE cannot be applied to the nullable side of an outer join"
     try:
-        # // конкурентный доступ: SELECT FOR UPDATE блокирует бронирование
+        # // конкурентный доступ: блокируем только Booking без JOIN
         stmt = (
             select(models.Booking)
-            .options(joinedload(models.Booking.slot))
             .where(models.Booking.id == booking_id)
-            .with_for_update()  # // row-level lock
+            .with_for_update()  # // row-level lock только на Booking
         )
         result = await session.execute(stmt)
         booking = result.scalar_one_or_none()
@@ -616,7 +628,11 @@ async def extend_booking(
                 "invalid_data",
                 "Некорректные данные бронирования"
             )
-        slot = booking.slot
+        
+        # // загружаем slot отдельно, после блокировки Booking
+        slot = None
+        if booking.slot_id:
+            slot = await session.get(models.Slot, booking.slot_id)
         if slot is None:
             raise BookingExtensionError(
                 "slot_not_found",
