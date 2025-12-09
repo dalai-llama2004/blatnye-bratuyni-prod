@@ -331,16 +331,21 @@ async def create_booking_by_time_range(
         )
         # // Исправление таймзоны: если API присылает naive datetime (без tzinfo),
         # // считаем его московским временем и конвертируем в UTC для хранения в БД.
-        # // Если уже есть tzinfo - НЕ трогаем, оставляем как есть.
+        # // Функция msk_to_utc() возвращает naive UTC datetime.
+        # // Если API прислал aware datetime - конвертируем в naive UTC для хранения.
         if start_time.tzinfo is None:
+            # Naive datetime - считаем московским временем
             start_time = msk_to_utc(start_time)
+        else:
+            # Aware datetime - конвертируем в naive UTC
+            start_time = start_time.astimezone(timezone.utc).replace(tzinfo=None)
+        
         if end_time.tzinfo is None:
+            # Naive datetime - считаем московским временем
             end_time = msk_to_utc(end_time)
-        # // После конвертации получаем naive UTC datetime для сравнений и хранения
-        if start_time.tzinfo is not None:
-            start_time = start_time.replace(tzinfo=None)
-        if end_time.tzinfo is not None:
-            end_time = end_time.replace(tzinfo=None)
+        else:
+            # Aware datetime - конвертируем в naive UTC
+            end_time = end_time.astimezone(timezone.utc).replace(tzinfo=None)
         # ----------------------------------------------------------------------
         duration = end_time - start_time
         if duration.total_seconds() <= 0:
