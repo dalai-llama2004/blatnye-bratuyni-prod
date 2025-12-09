@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { bookingService } from '@/lib/booking';
 import { authService } from '@/lib/auth';
+import { formatApiError } from '@/lib/api';
 import { BOOKING_CONFIG } from '@/lib/constants';
 import { Zone } from '@/types';
 import { useNotifications } from '@/lib/useNotifications';
@@ -115,7 +116,10 @@ export default function ZonesPage() {
       // Скрыть сообщение через 3 секунды
       setTimeout(() => setBookingSuccess(''), 3000);
     } catch (err: any) {
-      setBookingError(err.response?.data?.detail || 'Ошибка создания бронирования');
+      // Конвертируем ошибку API в строку для безопасного отображения в React
+      // Это предотвращает ошибку "Objects are not valid as a React child"
+      const errorMessage = formatApiError(err, 'Ошибка создания бронирования');
+      setBookingError(errorMessage);
     } finally {
       setBookingInProgress(false);
     }
