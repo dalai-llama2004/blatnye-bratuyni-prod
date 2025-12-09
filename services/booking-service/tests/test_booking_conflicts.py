@@ -9,6 +9,7 @@ import pytest
 from datetime import datetime, timedelta
 
 import models
+from timezone_utils import msk_to_utc, MOSCOW_TZ
 
 
 @pytest.mark.asyncio
@@ -186,12 +187,15 @@ async def test_prevent_overlapping_bookings_by_time_range(test_client, test_sess
     test_session.add(place)
     await test_session.flush()
     
-    # Создаём слот для первой брони
-    base_time = datetime.now() + timedelta(days=1)
+    # Создаём слот для первой брони в MSK времени и конвертируем в UTC
+    # Используем фиксированное время: завтра в 14:00-16:00 MSK
+    base_time_msk = MOSCOW_TZ.localize(datetime.now().replace(hour=14, minute=0, second=0, microsecond=0) + timedelta(days=1))
+    base_time_utc = msk_to_utc(base_time_msk)
+    
     slot1 = models.Slot(
         place_id=place.id,
-        start_time=base_time,
-        end_time=base_time + timedelta(hours=2),
+        start_time=base_time_utc,
+        end_time=base_time_utc + timedelta(hours=2),
         is_available=True
     )
     test_session.add(slot1)
@@ -206,21 +210,23 @@ async def test_prevent_overlapping_bookings_by_time_range(test_client, test_sess
     assert response1.status_code == 201
     
     # Пользователь пытается создать вторую бронь через by-time с пересечением
+    # 15:00-17:00 MSK (на час позже начала, но пересекается с 14:00-16:00)
     target_date = (datetime.now() + timedelta(days=1)).date()
     response2 = await test_client.post(
         "/bookings/by-time",
         json={
             "zone_id": zone.id,
             "date": target_date.isoformat(),
-            "start_hour": base_time.hour + 1,  # На час позже начала первой брони
+            "start_hour": 15,  # 15:00 MSK пересекается с 14:00-16:00 MSK
             "start_minute": 0,
-            "end_hour": base_time.hour + 3,
+            "end_hour": 17,
             "end_minute": 0
         },
         headers={"X-User-Id": "1", "X-User-Role": "user"}
     )
     # Должна вернуться ошибка 409 (конфликт)
     assert response2.status_code == 409
+
 
 
 @pytest.mark.asyncio
