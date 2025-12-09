@@ -99,7 +99,8 @@ async def test_zone_statistics_current_occupancy(test_session):
     assert zone_stat.zone_id == zone.id
     assert zone_stat.zone_name == zone.name
     assert zone_stat.is_active is True
-    assert zone_stat.active_bookings == 3
+    # Истёкшая бронь (past_booking) автоматически завершилась, поэтому только 2 активные
+    assert zone_stat.active_bookings == 2
     assert zone_stat.cancelled_bookings == 0
     # Текущая загрузка должна быть 1 (только current_booking)
     assert zone_stat.current_occupancy == 1

@@ -875,6 +875,69 @@ async def get_global_statistics(
         users_in_coworking_now=users_now,
     )
 
+async def get_zones_statistics(
+    session: AsyncSession,
+) -> List[schemas.ZoneStatistics]:
+    """
+    Получить статистику по всем зонам.
+    Возвращает статистику для каждой зоны: активные и отменённые брони,
+    текущую загрузку (сколько человек сейчас в зоне).
+    """
+    # // автоматически завершаем истёкшие бронирования перед расчётом статистики
+    await auto_complete_expired_bookings(session)
+    
+    now = msk_to_utc(now_msk())
+    
+    # Получаем все зоны
+    stmt = select(models.Zone).order_by(models.Zone.name)
+    result = await session.execute(stmt)
+    zones: List[models.Zone] = list(result.scalars().all())
+    
+    all_zone_ids = [zone.id for zone in zones]
+    
+    # Получаем статистику по бронированиям
+    stmt_stats = (
+        select(
+            models.Zone.id.label('zone_id'),
+            func.count(case((models.Booking.status == "active", 1))).label("active_bookings"),
+            func.count(case((models.Booking.status == "cancelled", 1))).label("cancelled_bookings"),
+            func.count(case(
+                (
+                    and_(
+                        models.Booking.status == "active",
+                        models.Booking.start_time <= now,
+                        models.Booking.end_time > now,
+                        models.Place.zone_id == models.Zone.id,
+                    ),
+                    1
+                )
+            )).label("current_occupancy"),
+        )
+        .outerjoin(models.Place, models.Place.zone_id == models.Zone.id)
+        .outerjoin(models.Slot, models.Slot.place_id == models.Place.id)
+        .outerjoin(models.Booking, models.Booking.slot_id == models.Slot.id)
+        .where(models.Zone.id.in_(all_zone_ids))
+        .group_by(models.Zone.id)
+    )
+    
+    result_stats = await session.execute(stmt_stats)
+    stats_map = {row.zone_id: row for row in result_stats}
+    
+    result_list = []
+    for zone in zones:
+        stats_row = stats_map.get(zone.id)
+        result_list.append(schemas.ZoneStatistics(
+            zone_id=zone.id,
+            zone_name=zone.name,
+            is_active=zone.is_active,
+            closure_reason=zone.closure_reason,
+            closed_until=zone.closed_until,
+            active_bookings=int(getattr(stats_row, "active_bookings", 0)),
+            cancelled_bookings=int(getattr(stats_row, "cancelled_bookings", 0)),
+            current_occupancy=int(getattr(stats_row, "current_occupancy", 0)),
+        ))
+    return result_list
+
 async def check_zone_capacity(
     session: AsyncSession,
     zone_id: int,
