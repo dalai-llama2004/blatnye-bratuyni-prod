@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { bookingService, adminService, notificationService } from '@/lib/booking';
 import { authService } from '@/lib/auth';
+import { formatApiError } from '@/lib/api';
 import { Zone } from '@/types';
 import { formatMoscowTime, fromMoscowDatetimeLocal } from '@/lib/timezone';
 
@@ -75,7 +76,9 @@ export default function AdminPage() {
       setCreateForm({ name: '', address: '', is_active: true, places_count: 10 });
       loadZones();
     } catch (err: any) {
-      alert(err.response?.data?.detail || 'Ошибка создания зоны');
+      // Конвертируем ошибку API в строку для безопасного отображения
+      const errorMessage = formatApiError(err, 'Ошибка создания зоны');
+      alert(errorMessage);
     }
   };
 
@@ -90,7 +93,9 @@ export default function AdminPage() {
       setSelectedZone(null);
       loadZones();
     } catch (err: any) {
-      alert(err.response?.data?.detail || 'Ошибка обновления зоны');
+      // Конвертируем ошибку API в строку для безопасного отображения
+      const errorMessage = formatApiError(err, 'Ошибка обновления зоны');
+      alert(errorMessage);
     }
   };
 
@@ -104,7 +109,9 @@ export default function AdminPage() {
       alert('Зона удалена успешно');
       loadZones();
     } catch (err: any) {
-      alert(err.response?.data?.detail || 'Ошибка удаления зоны');
+      // Конвертируем ошибку API в строку для безопасного отображения
+      const errorMessage = formatApiError(err, 'Ошибка удаления зоны');
+      alert(errorMessage);
     }
   };
 
@@ -126,7 +133,9 @@ export default function AdminPage() {
       setCloseForm({ reason: '', from_time: '', to_time: '' });
       loadZones();
     } catch (err: any) {
-      alert(err.response?.data?.detail || 'Ошибка закрытия зоны');
+      // Конвертируем ошибку API в строку для безопасного отображения
+      const errorMessage = formatApiError(err, 'Ошибка закрытия зоны');
+      alert(errorMessage);
     }
   };
 
@@ -149,7 +158,9 @@ export default function AdminPage() {
       setShowBulkNotificationModal(false);
       setBulkNotificationForm({ subject: '', text: '' });
     } catch (err: any) {
-      alert(err.response?.data?.detail || 'Ошибка отправки рассылки');
+      // Конвертируем ошибку API в строку для безопасного отображения
+      const errorMessage = formatApiError(err, 'Ошибка отправки рассылки');
+      alert(errorMessage);
     }
   };
 

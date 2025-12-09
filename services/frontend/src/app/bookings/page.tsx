@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { bookingService } from '@/lib/booking';
 import { authService } from '@/lib/auth';
+import { formatApiError } from '@/lib/api';
 import { Booking } from '@/types';
 import { formatMoscowTime } from '@/lib/timezone';
 import { useNotifications } from '@/lib/useNotifications';
@@ -94,7 +95,9 @@ export default function BookingsPage() {
       );
       loadBookings();
     } catch (err: any) {
-      alert(err.response?.data?.detail || 'Ошибка отмены бронирования');
+      // Конвертируем ошибку API в строку для безопасного отображения
+      const errorMessage = formatApiError(err, 'Ошибка отмены бронирования');
+      alert(errorMessage);
     } finally {
       setCancellingId(null);
     }
@@ -111,7 +114,9 @@ export default function BookingsPage() {
       );
       loadBookings();
     } catch (err: any) {
-      alert(err.response?.data?.detail || 'Ошибка продления бронирования');
+      // Конвертируем ошибку API в строку для безопасного отображения
+      const errorMessage = formatApiError(err, 'Ошибка продления бронирования');
+      alert(errorMessage);
     }
   };
 
