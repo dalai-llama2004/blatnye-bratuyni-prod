@@ -23,10 +23,60 @@ from notifications import (
 )
 
 # ============================================================
+#                    ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+# ============================================================
+
+async def auto_complete_expired_bookings(
+    session: AsyncSession,
+    booking: Optional[models.Booking] = None,
+) -> None:
+    """
+    Автоматически переводит активные бронирования в статус "completed" 
+    если их слот уже истёк (end_time < now).
+    
+    Если передано конкретное бронирование, проверяет только его.
+    Иначе проверяет все активные бронирования.
+    """
+    # // получаем текущее время в UTC (naive datetime для сравнения с БД)
+    now = msk_to_utc(now_msk())
+    
+    if booking:
+        # Проверяем только конкретное бронирование
+        if booking.status == "active" and booking.end_time is not None:
+            # // приводим end_time к naive UTC для корректного сравнения
+            end_time_naive = booking.end_time.replace(tzinfo=None) if booking.end_time.tzinfo is not None else booking.end_time
+            if end_time_naive <= now:
+                booking.status = "completed"
+                await session.commit()
+    else:
+        # Проверяем все активные бронирования
+        stmt = (
+            select(models.Booking)
+            .where(
+                and_(
+                    models.Booking.status == "active",
+                    models.Booking.end_time.isnot(None),
+                    models.Booking.end_time <= now,
+                )
+            )
+        )
+        result = await session.execute(stmt)
+        expired_bookings = list(result.scalars().all())
+        
+        for exp_booking in expired_bookings:
+            exp_booking.status = "completed"
+        
+        if expired_bookings:
+            await session.commit()
+
+# ============================================================
 #                       READ-ONLY ЧАСТЬ
 # ============================================================
 
 async def get_zones(session: AsyncSession, include_inactive: bool = False) -> List[schemas.ZoneOut]:
+    # // автоматически завершаем истёкшие бронирования перед расчётом статистики
+    await auto_complete_expired_bookings(session)
+    
     now = msk_to_utc(now_msk())
     stmt_reactivate = (
         select(models.Zone)
@@ -464,6 +514,9 @@ async def get_booking_history(
     user_id: int,
     filters: Optional[schemas.BookingHistoryFilters] = None,
 ) -> List[models.Booking]:
+    # // автоматически завершаем истёкшие бронирования перед получением истории
+    await auto_complete_expired_bookings(session)
+    
     filters = filters or schemas.BookingHistoryFilters()
     stmt = (
         select(models.Booking)
@@ -489,7 +542,14 @@ async def get_booking_history(
     return list(result.scalars().all())
 
 class BookingExtensionError(Exception):
-    pass
+    """
+    Исключение для конкретных ошибок при продлении брони.
+    Содержит код ошибки и сообщение для пользователя.
+    """
+    def __init__(self, code: str, message: str):
+        self.code = code
+        self.message = message
+        super().__init__(message)
 
 # // Класс для детальных ошибок при создании брони
 class BookingError(Exception):
@@ -522,21 +582,51 @@ async def extend_booking(
         booking = result.scalar_one_or_none()
         
         if booking is None:
-            raise BookingExtensionError("Бронирование не найдено")
+            raise BookingExtensionError(
+                "booking_not_found",
+                "Бронирование не найдено"
+            )
+        
+        # // проверка истечения срока: автоматически переводим истёкшие брони в статус "completed"
+        now = msk_to_utc(now_msk())
+        if booking.end_time:
+            # // приводим end_time к naive UTC для корректного сравнения
+            end_time_naive = booking.end_time.replace(tzinfo=None) if booking.end_time.tzinfo is not None else booking.end_time
+            if end_time_naive <= now:
+                # Автоматически завершаем истёкшую бронь
+                await auto_complete_expired_bookings(session, booking)
+                raise BookingExtensionError(
+                    "booking_expired",
+                    "Бронирование уже завершено: слот истёк. Создайте новое бронирование."
+                )
+        
         # // проверка прав доступа: только владелец может продлить бронирование
         if booking.user_id != user_id:
-            raise BookingExtensionError("Нет прав на продление этого бронирования")
+            raise BookingExtensionError(
+                "permission_denied",
+                "Нет прав на продление этого бронирования"
+            )
         if booking.status != "active":
-            raise BookingExtensionError("Можно продлить только активное бронирование")
+            raise BookingExtensionError(
+                "invalid_status",
+                "Можно продлить только активное бронирование"
+            )
         if booking.start_time is None or booking.end_time is None:
-            raise BookingExtensionError("Некорректные данные бронирования")
+            raise BookingExtensionError(
+                "invalid_data",
+                "Некорректные данные бронирования"
+            )
         slot = booking.slot
         if slot is None:
-            raise BookingExtensionError("Слот бронирования не найден")
+            raise BookingExtensionError(
+                "slot_not_found",
+                "Слот бронирования не найден"
+            )
         new_end_time = booking.end_time + timedelta(hours=extend_hours, minutes=extend_minutes)
         total_duration = new_end_time - booking.start_time
         if total_duration.total_seconds() > settings.MAX_BOOKING_HOURS * 3600:
             raise BookingExtensionError(
+                "max_duration_exceeded",
                 f"Превышен максимальный лимит бронирования ({settings.MAX_BOOKING_HOURS} часов)"
             )
         has_conflict = await check_user_booking_conflicts(
@@ -548,6 +638,7 @@ async def extend_booking(
         )
         if has_conflict:
             raise BookingExtensionError(
+                "user_time_conflict",
                 "У вас уже есть другое бронирование на это время"
             )
         zone = None
@@ -562,7 +653,10 @@ async def extend_booking(
             if place and place.zone:
                 zone = place.zone
         if zone is None:
-            raise BookingExtensionError("Зона не найдена")
+            raise BookingExtensionError(
+                "zone_not_found",
+                "Зона не найдена"
+            )
         can_book = await check_zone_capacity(
             session=session,
             zone_id=zone.id,
@@ -571,6 +665,7 @@ async def extend_booking(
         )
         if not can_book:
             raise BookingExtensionError(
+                "zone_capacity_exceeded",
                 "Зона переполнена на выбранное время. Попробуйте продлить на меньшее время"
             )
         # // конкурентный доступ: SELECT FOR UPDATE для существующего слота
@@ -591,6 +686,7 @@ async def extend_booking(
             extended_slot.is_available = False
         elif extended_slot and not extended_slot.is_available:
             raise BookingExtensionError(
+                "slot_unavailable",
                 "Выбранное время уже занято. Попробуйте продлить на меньшее время"
             )
         else:
@@ -609,6 +705,7 @@ async def extend_booking(
             for overlap_slot in overlapping_slots:
                 if not overlap_slot.is_available:
                     raise BookingExtensionError(
+                        "slot_partially_occupied",
                         "Выбранное время частично занято. Попробуйте продлить на меньшее время"
                     )
             # // создаём новый слот - unique constraint предотвратит дубликацию
@@ -641,7 +738,10 @@ async def extend_booking(
     except IntegrityError:
         # // обработка уникальности: ловим IntegrityError при создании дублирующего слота
         await session.rollback()
-        raise BookingExtensionError("Не удалось продлить бронирование - возможно, слот уже занят")
+        raise BookingExtensionError(
+            "integrity_error",
+            "Не удалось продлить бронирование - возможно, слот уже занят"
+        )
 
 # ============================================================
 #                      АДМИНСКИЕ ОПЕРАЦИИ
@@ -748,6 +848,9 @@ async def close_zone(
 async def get_global_statistics(
     session: AsyncSession,
 ) -> schemas.GlobalStatistics:
+    # // автоматически завершаем истёкшие бронирования перед расчётом статистики
+    await auto_complete_expired_bookings(session)
+    
     stmt = select(
         func.count(models.Booking.id).filter(models.Booking.status == "active").label("active_count"),
         func.count(models.Booking.id).filter(models.Booking.status == "cancelled").label("cancelled_count"),
