@@ -343,7 +343,7 @@ async def create_booking_by_time_range(
                 session.add(booking)
                 # // транзакция: commit гарантирует атомарность
                 await session.commit()
-                await session.refresh(booking)
+                await session.refresh(booking, ["slot"])
                 
                 # // уведомления: Отправляем email и push уведомление при создании бронирования
                 await notify_booking_created(user_id, booking.zone_name, booking.start_time, booking.end_time)
@@ -391,7 +391,7 @@ async def create_booking_by_time_range(
                     session.add(booking)
                     # // транзакция: commit гарантирует атомарность
                     await session.commit()
-                    await session.refresh(booking)
+                    await session.refresh(booking, ["slot"])
                     
                     # // уведомления: Отправляем email и push уведомление при создании бронирования
                     await notify_booking_created(user_id, booking.zone_name, booking.start_time, booking.end_time)

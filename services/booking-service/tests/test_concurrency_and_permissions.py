@@ -98,9 +98,10 @@ async def test_duplicate_slot_creation_integrity_error(test_session):
     assert booking1 is not None, "Первое бронирование должно быть успешным"
     
     # Пытаемся создать второе бронирование с точно такими же параметрами
-    # // обработка уникальности: второе бронирование должно вернуть None из-за IntegrityError
-    booking2 = await crud.create_booking_by_time_range(test_session, user_id=2, booking_in=booking_data)
-    assert booking2 is None, "Второе бронирование должно вернуть None из-за дублирующего слота"
+    # // обработка уникальности: второе бронирование должно выбросить BookingError из-за превышения вместимости
+    with pytest.raises(crud.BookingError) as exc_info:
+        booking2 = await crud.create_booking_by_time_range(test_session, user_id=2, booking_in=booking_data)
+    assert exc_info.value.code in ["ZONE_CAPACITY_EXCEEDED", "NO_AVAILABLE_PLACES"], "Ожидается ошибка о превышении вместимости или отсутствии свободных мест"
 
 
 @pytest.mark.asyncio

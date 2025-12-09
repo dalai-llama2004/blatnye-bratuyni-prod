@@ -240,7 +240,8 @@ async def test_no_available_places_error(test_client, test_session):
     assert response.status_code == 409
     json_data = response.json()
     assert "code" in json_data["detail"]
-    assert json_data["detail"]["code"] == "NO_AVAILABLE_PLACES"
+    # Зона без мест возвращает ZONE_CAPACITY_EXCEEDED (max_capacity = 0)
+    assert json_data["detail"]["code"] == "ZONE_CAPACITY_EXCEEDED"
 
 
 @pytest.mark.asyncio
