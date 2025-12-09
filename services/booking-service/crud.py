@@ -329,11 +329,18 @@ async def create_booking_by_time_range(
                 minute=booking_in.end_minute
             )
         )
-        # --- Исправление: сделали datetime "aware" (с таймзоной, теперь UTC) ---
+        # // Исправление таймзоны: если API присылает naive datetime (без tzinfo),
+        # // считаем его московским временем и конвертируем в UTC для хранения в БД.
+        # // Если уже есть tzinfo - НЕ трогаем, оставляем как есть.
         if start_time.tzinfo is None:
-            start_time = start_time.replace(tzinfo=timezone.utc)
+            start_time = msk_to_utc(start_time)
         if end_time.tzinfo is None:
-            end_time = end_time.replace(tzinfo=timezone.utc)
+            end_time = msk_to_utc(end_time)
+        # // После конвертации получаем naive UTC datetime для сравнений и хранения
+        if start_time.tzinfo is not None:
+            start_time = start_time.replace(tzinfo=None)
+        if end_time.tzinfo is not None:
+            end_time = end_time.replace(tzinfo=None)
         # ----------------------------------------------------------------------
         duration = end_time - start_time
         if duration.total_seconds() <= 0:
