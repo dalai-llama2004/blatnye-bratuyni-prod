@@ -56,10 +56,15 @@ def get_db():
 
 @router.post("/users/register")
 def register_user(data: RegisterModel, db: Session = Depends(get_db)):
+    # // обработка уникальности: проверяем существование email перед созданием
     if get_user_by_email(db, data.email):
         raise HTTPException(status_code=400, detail="Email already registered")
-    create_user(db, data.name, data.email, data.password)
-    return {"message": "User created. Check your email for confirmation code."}
+    try:
+        create_user(db, data.name, data.email, data.password)
+        return {"message": "User created. Check your email for confirmation code."}
+    except ValueError as e:
+        # // обработка уникальности: friendly error при дублировании email (race condition)
+        raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/users/confirm")
 def confirm_email(data: ConfirmModel, db: Session = Depends(get_db)):
