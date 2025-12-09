@@ -49,21 +49,29 @@ api.interceptors.response.use(
  * @param defaultMessage - Сообщение по умолчанию
  * @returns Строка с описанием ошибки
  */
-export function formatApiError(err: any, defaultMessage: string = 'Произошла ошибка'): string {
+export function formatApiError(err: unknown, defaultMessage: string = 'Произошла ошибка'): string {
+  // Проверяем что err является объектом с нужными полями
+  if (!err || typeof err !== 'object') {
+    return defaultMessage;
+  }
+
+  const error = err as any; // Используем any для доступа к полям после проверки
+
   // Если у ошибки есть response.data.detail
-  if (err.response?.data?.detail) {
-    const detail = err.response.data.detail;
+  if (error.response?.data?.detail) {
+    const detail = error.response.data.detail;
     
     // Если detail - объект с полем message (например, {code, message})
     if (typeof detail === 'object' && detail !== null) {
-      if (detail.message) {
-        return String(detail.message);
+      if (detail.message && typeof detail.message === 'string') {
+        return detail.message;
       }
-      if (detail.error) {
-        return String(detail.error);
+      if (detail.error && typeof detail.error === 'string') {
+        return detail.error;
       }
-      // Если объект, но без известных полей - сериализуем в JSON
-      return JSON.stringify(detail);
+      // Если объект без известных полей - возвращаем дефолтное сообщение
+      // (чтобы не раскрывать внутреннюю структуру ошибки пользователю)
+      return defaultMessage;
     }
     
     // Если detail - строка, возвращаем её
@@ -73,22 +81,52 @@ export function formatApiError(err: any, defaultMessage: string = 'Произо�
   }
   
   // Если есть response.data.error
-  if (err.response?.data?.error && typeof err.response.data.error === 'string') {
-    return err.response.data.error;
+  if (error.response?.data?.error && typeof error.response.data.error === 'string') {
+    return error.response.data.error;
   }
   
   // Если есть response.data как строка
-  if (err.response?.data && typeof err.response.data === 'string') {
-    return err.response.data;
+  if (error.response?.data && typeof error.response.data === 'string') {
+    return error.response.data;
   }
   
   // Если есть message в самой ошибке
-  if (err.message && typeof err.message === 'string') {
-    return err.message;
+  if (error.message && typeof error.message === 'string') {
+    return error.message;
   }
   
   // Возвращаем сообщение по умолчанию
   return defaultMessage;
+}
+
+/**
+ * Извлекает код ошибки из ответа API, если он доступен.
+ * 
+ * @param err - Объект ошибки
+ * @returns Код ошибки или null
+ */
+export function getApiErrorCode(err: unknown): string | null {
+  if (!err || typeof err !== 'object') {
+    return null;
+  }
+
+  const error = err as any;
+
+  // Проверяем наличие кода в response.data.detail
+  if (error.response?.data?.detail) {
+    const detail = error.response.data.detail;
+    
+    if (typeof detail === 'object' && detail !== null && detail.code) {
+      return String(detail.code);
+    }
+  }
+
+  // Проверяем наличие кода напрямую в response.data
+  if (error.response?.data?.code) {
+    return String(error.response.data.code);
+  }
+
+  return null;
 }
 
 export default api;
