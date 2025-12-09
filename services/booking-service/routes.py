@@ -168,5 +168,8 @@ async def extend_booking(
         )
         return booking
     except BookingExtensionError as e:
-        # Возвращаем детальное описание ошибки пользователю
-        raise HTTPException(400, str(e))
+        # // возвращаем детальную ошибку с кодом и сообщением
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": e.code, "message": e.message}
+        )

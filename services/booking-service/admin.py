@@ -168,3 +168,19 @@ async def close_zone_endpoint(
         data=data,
     )
     return affected_bookings
+
+@router.get(
+    "/statistics",
+    response_model=schemas.GlobalStatistics,
+    summary="Получить глобальную статистику (admin)",
+)
+async def get_global_statistics_endpoint(
+    session: AsyncSession = Depends(get_session),
+    _: None = Depends(require_admin),
+):
+    """
+    Получить глобальную статистику по всем бронированиям.
+    Возвращает количество активных и отменённых бронирований,
+    а также количество пользователей в коворкинге прямо сейчас.
+    """
+    return await crud.get_global_statistics(session)

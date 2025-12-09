@@ -297,9 +297,13 @@ async def test_extend_booking_error_messages(test_client, test_session):
     assert response.status_code == 400
     error_data = response.json()
     assert "detail" in error_data
-    # Проверяем, что сообщение содержит полезную информацию, а не [object Object]
-    assert "максимальный лимит" in error_data["detail"].lower()
-    assert "часов" in error_data["detail"].lower()
+    # Проверяем новый формат ошибки с code и message
+    assert isinstance(error_data["detail"], dict)
+    assert "code" in error_data["detail"]
+    assert "message" in error_data["detail"]
+    assert error_data["detail"]["code"] == "max_duration_exceeded"
+    assert "максимальный лимит" in error_data["detail"]["message"].lower()
+    assert "часов" in error_data["detail"]["message"].lower()
 
 
 @pytest.mark.asyncio
@@ -314,4 +318,9 @@ async def test_extend_booking_not_found_error(test_client, test_session):
     assert response.status_code == 400
     error_data = response.json()
     assert "detail" in error_data
-    assert "не найдено" in error_data["detail"].lower()
+    # Проверяем новый формат ошибки с code и message
+    assert isinstance(error_data["detail"], dict)
+    assert "code" in error_data["detail"]
+    assert "message" in error_data["detail"]
+    assert error_data["detail"]["code"] == "booking_not_found"
+    assert "не найдено" in error_data["detail"]["message"].lower()
