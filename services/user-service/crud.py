@@ -1,24 +1,31 @@
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError  # // обработка уникальности email
 from models import User
 from auth import hash_password
 from email_utils import generate_code, send_email
 from typing import List
 
 def create_user(db: Session, name: str, email: str, password: str):
-    code = generate_code()
-    user = User(
-        name=name,
-        email=email,
-        hashed_password=hash_password(password),
-        confirmation_code=code
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+    # // обработка уникальности: оборачиваем в try-except для IntegrityError на случай race condition
+    try:
+        code = generate_code()
+        user = User(
+            name=name,
+            email=email,
+            hashed_password=hash_password(password),
+            confirmation_code=code
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
 
-    send_email(email, "Email confirmation", f"Your code: {code}")
+        send_email(email, "Email confirmation", f"Your code: {code}")
 
-    return user
+        return user
+    except IntegrityError:
+        # // обработка уникальности: при конкурентном создании пользователей с одинаковым email
+        db.rollback()
+        raise ValueError("Email already registered")
 
 def confirm_user(db: Session, email: str, code: str):
     user = db.query(User).filter(User.email == email).first()
