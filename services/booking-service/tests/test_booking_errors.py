@@ -217,14 +217,14 @@ async def test_zone_capacity_exceeded_error(test_client, test_session):
 
 
 @pytest.mark.asyncio
-async def test_no_available_places_error(test_client, test_session):
-    """Тест проверки ошибки при отсутствии активных мест в зоне"""
+async def test_zone_without_places_capacity_error(test_client, test_session):
+    """Тест проверки ошибки при попытке бронирования в зоне без мест"""
     zone = models.Zone(name="Test Zone", address="Test Addr", is_active=True)
     test_session.add(zone)
     await test_session.commit()
     
     target_date = date.today()
-    # Попытка создать бронь в зоне без мест
+    # Попытка создать бронь в зоне без мест возвращает ZONE_CAPACITY_EXCEEDED (max_capacity = 0)
     response = await test_client.post(
         "/bookings/by-time",
         json={
@@ -240,7 +240,6 @@ async def test_no_available_places_error(test_client, test_session):
     assert response.status_code == 409
     json_data = response.json()
     assert "code" in json_data["detail"]
-    # Зона без мест возвращает ZONE_CAPACITY_EXCEEDED (max_capacity = 0)
     assert json_data["detail"]["code"] == "ZONE_CAPACITY_EXCEEDED"
 
 
