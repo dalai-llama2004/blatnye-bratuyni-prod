@@ -466,9 +466,10 @@ async def get_booking_by_id(
     session: AsyncSession,
     booking_id: int,
 ) -> Optional[models.Booking]:
+    # // исправление: добавляем eager-загрузку slot и place для избежания MissingGreenlet
     stmt = (
         select(models.Booking)
-        .options(joinedload(models.Booking.slot))
+        .options(joinedload(models.Booking.slot).joinedload(models.Slot.place))
         .where(models.Booking.id == booking_id)
     )
     result = await session.execute(stmt)
@@ -530,13 +531,14 @@ async def get_booking_history(
     await auto_complete_expired_bookings(session)
     
     filters = filters or schemas.BookingHistoryFilters()
+    # // исправление: добавляем eager-загрузку slot и place для избежания MissingGreenlet
     stmt = (
         select(models.Booking)
         .join(models.Slot, models.Slot.id == models.Booking.slot_id)
         .join(models.Place, models.Place.id == models.Slot.place_id)
         .join(models.Zone, models.Zone.id == models.Place.zone_id)
         .where(models.Booking.user_id == user_id)
-        .options(joinedload(models.Booking.slot))
+        .options(joinedload(models.Booking.slot).joinedload(models.Slot.place))
         .order_by(models.Booking.created_at.desc())
     )
     conds = []
@@ -657,8 +659,9 @@ async def extend_booking(
                 "user_time_conflict",
                 "У вас уже есть другое бронирование на это время"
             )
+        # // исправление: используем slot.place_id вместо slot.place для избежания lazy-загрузки
         zone = None
-        if slot.place:
+        if slot.place_id:
             stmt = (
                 select(models.Place)
                 .options(joinedload(models.Place.zone))
@@ -822,6 +825,7 @@ async def close_zone(
     zone.is_active = False
     zone.closure_reason = data.reason
     zone.closed_until = data.to_time
+    # // исправление: добавляем eager-загрузку slot и place для избежания MissingGreenlet
     stmt = (
         select(models.Booking)
         .join(models.Slot, models.Slot.id == models.Booking.slot_id)
@@ -835,7 +839,7 @@ async def close_zone(
                 models.Slot.end_time  > data.from_time,
             )
         )
-        .options(joinedload(models.Booking.slot))
+        .options(joinedload(models.Booking.slot).joinedload(models.Slot.place))
     )
     result = await session.execute(stmt)
     affected_bookings: List[models.Booking] = list(result.scalars().all())
