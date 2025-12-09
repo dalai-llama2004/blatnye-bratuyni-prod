@@ -62,10 +62,13 @@ async def booking_history(request: Request, user=Depends(get_current_user)):
     return Response(content=resp.content, status_code=resp.status_code, media_type=resp.headers.get('content-type',"application/json"))
 
 @router.post("/{booking_id}/extend")
-async def extend_booking(booking_id: int, user=Depends(get_current_user)):
+async def extend_booking(booking_id: int, request: Request, user=Depends(get_current_user)):
+    # // Получаем тело запроса с параметрами продления (extend_hours, extend_minutes)
+    body = await request.json()
     headers = {
         "X-User-Id": str(user.get('user_id', user.get('sub'))),
         "X-User-Role": user.get('role', 'user')
     }
-    resp = requests.post(f"{BOOKING_SERVICE_URL}/bookings/{booking_id}/extend", headers=headers)
+    # // Передаём тело запроса в booking service для корректной валидации
+    resp = requests.post(f"{BOOKING_SERVICE_URL}/bookings/{booking_id}/extend", json=body, headers=headers)
     return Response(content=resp.content, status_code=resp.status_code, media_type=resp.headers.get('content-type',"application/json"))
