@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import schemas
-from crud import BookingExtensionError
+from crud import BookingExtensionError, BookingError
 from db import get_session
 
 router = APIRouter(tags=["booking"])
@@ -91,13 +91,15 @@ async def create_booking_by_time(
     session: AsyncSession = Depends(get_session),
     user_id: int = Depends(get_current_user_id),
 ):
-    booking = await crud.create_booking_by_time_range(session, user_id, booking_in)
-    if booking is None:
+    try:
+        booking = await crud.create_booking_by_time_range(session, user_id, booking_in)
+        return booking
+    except BookingError as e:
+        # // возвращаем детальную ошибку с кодом и сообщением
         raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            "Невозможно создать бронь: нет свободных мест, некорректный интервал, превышен лимит в 6 часов или зона переполнена"
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": e.code, "message": e.message}
         )
-    return booking
 
 
 @router.post(

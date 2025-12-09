@@ -255,7 +255,7 @@ async def create_booking_by_time_range(
         try:
             target_date = date_type.fromisoformat(booking_in.date)
         except ValueError:
-            return None
+            raise BookingError("INVALID_DATE", "Некорректная дата")
         
         start_time = datetime.combine(
             target_date,
@@ -279,12 +279,12 @@ async def create_booking_by_time_range(
         # ----------------------------------------------------------------------
         duration = end_time - start_time
         if duration.total_seconds() <= 0:
-            return None
+            raise BookingError("INVALID_TIME_RANGE", "Некорректный временной интервал: время окончания должно быть позже времени начала")
         if duration.total_seconds() > settings.MAX_BOOKING_HOURS * 3600:
-            return None
+            raise BookingError("TIME_LIMIT_EXCEEDED", f"Превышен лимит времени бронирования: максимум {settings.MAX_BOOKING_HOURS} часов")
         zone = await session.get(models.Zone, booking_in.zone_id)
         if zone is None or not zone.is_active:
-            return None
+            raise BookingError("ZONE_INACTIVE", "Зона недоступна или неактивна")
         has_conflict = await check_user_booking_conflicts(
             session=session,
             user_id=user_id,
@@ -292,7 +292,7 @@ async def create_booking_by_time_range(
             end_time=end_time,
         )
         if has_conflict:
-            return None
+            raise BookingError("USER_CONFLICT", "У вас уже есть активное бронирование на это время")
         can_book = await check_zone_capacity(
             session=session,
             zone_id=zone.id,
@@ -300,7 +300,7 @@ async def create_booking_by_time_range(
             end_time=end_time,
         )
         if not can_book:
-            return None
+            raise BookingError("ZONE_CAPACITY_EXCEEDED", "Зона переполнена: достигнута максимальная вместимость")
         stmt = (
             select(models.Place)
             .where(
@@ -313,7 +313,7 @@ async def create_booking_by_time_range(
         result = await session.execute(stmt)
         places = list(result.scalars().all())
         if not places:
-            return None
+            raise BookingError("NO_AVAILABLE_PLACES", "Нет доступных мест в данной зоне")
         for place in places:
             # // конкурентный доступ: SELECT FOR UPDATE блокирует существующий слот
             stmt_exact = (
@@ -343,7 +343,7 @@ async def create_booking_by_time_range(
                 session.add(booking)
                 # // транзакция: commit гарантирует атомарность
                 await session.commit()
-                await session.refresh(booking)
+                await session.refresh(booking, attribute_names=['slot'])
                 
                 # // уведомления: Отправляем email и push уведомление при создании бронирования
                 await notify_booking_created(user_id, booking.zone_name, booking.start_time, booking.end_time)
@@ -391,17 +391,18 @@ async def create_booking_by_time_range(
                     session.add(booking)
                     # // транзакция: commit гарантирует атомарность
                     await session.commit()
-                    await session.refresh(booking)
+                    await session.refresh(booking, attribute_names=['slot'])
                     
                     # // уведомления: Отправляем email и push уведомление при создании бронирования
                     await notify_booking_created(user_id, booking.zone_name, booking.start_time, booking.end_time)
                     
                     return booking
-        return None
+        # // если все места проверены и ни одно не подошло
+        raise BookingError("NO_AVAILABLE_PLACES", "Нет свободных мест на указанное время")
     except IntegrityError:
         # // обработка уникальности: ловим IntegrityError при попытке создать дублирующий слот или бронирование
         await session.rollback()
-        return None
+        raise BookingError("NO_AVAILABLE_PLACES", "Нет свободных мест на указанное время (конфликт при создании)")
 
 async def get_booking_by_id(
     session: AsyncSession,
@@ -489,6 +490,17 @@ async def get_booking_history(
 
 class BookingExtensionError(Exception):
     pass
+
+# // Класс для детальных ошибок при создании брони
+class BookingError(Exception):
+    """
+    Исключение для конкретных ошибок при создании брони.
+    Содержит код ошибки и сообщение для пользователя.
+    """
+    def __init__(self, code: str, message: str):
+        self.code = code
+        self.message = message
+        super().__init__(message)
 
 async def extend_booking(
     session: AsyncSession,
