@@ -161,7 +161,11 @@ def test_password_recovery(mock_send_email, test_client, test_db):
 
 @patch('crud.send_email')
 def test_duplicate_email_registration(mock_send_email, test_client, test_db):
-    """Test that duplicate email registration is rejected"""
+    """
+    Test that duplicate email registration is rejected.
+    
+    // обработка уникальности: проверяем, что дублирование email возвращает friendly error.
+    """
     mock_send_email.return_value = None
     
     # Create first user
@@ -176,6 +180,7 @@ def test_duplicate_email_registration(mock_send_email, test_client, test_db):
     assert response.status_code == 200
     
     # Try to create another user with same email
+    # // обработка уникальности: должен вернуть 400 с понятным сообщением
     response = test_client.post(
         "/users/register",
         json={
@@ -185,3 +190,23 @@ def test_duplicate_email_registration(mock_send_email, test_client, test_db):
         }
     )
     assert response.status_code == 400
+    assert "already registered" in response.json()["detail"].lower()
+
+
+@patch('crud.send_email')
+def test_duplicate_email_integrity_error_handling(mock_send_email, test_db):
+    """
+    Test that IntegrityError is properly handled during concurrent user creation.
+    
+    // обработка уникальности: при конкурентном создании пользователей с одинаковым email
+    // IntegrityError должен быть пойман и преобразован в ValueError с понятным сообщением.
+    """
+    mock_send_email.return_value = None
+    
+    # Create first user directly
+    create_user(test_db, "Test User 1", "concurrent@example.com", "password123")
+    
+    # Try to create another user with same email directly (симулируем race condition)
+    # // обработка уникальности: должен вызвать ValueError
+    with pytest.raises(ValueError, match="Email already registered"):
+        create_user(test_db, "Test User 2", "concurrent@example.com", "password456")
