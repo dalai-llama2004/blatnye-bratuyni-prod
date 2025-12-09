@@ -1,5 +1,7 @@
 import pytest
+import jwt
 from unittest.mock import patch, MagicMock
+from config import SECRET_KEY
 
 
 @patch('routes.user.requests.post')
@@ -73,8 +75,6 @@ def test_extend_booking_forwards_body(mock_post, test_client):
     mock_post.return_value = mock_response
     
     # // Создаём валидный JWT токен для аутентификации
-    import jwt
-    from config import SECRET_KEY
     token = jwt.encode({'user_id': 1, 'sub': 1, 'role': 'user'}, SECRET_KEY, algorithm='HS256')
     
     # // Отправляем запрос на продление с телом и токеном
