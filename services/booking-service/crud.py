@@ -218,7 +218,7 @@ async def create_booking(
             )
             if not can_book:
                 return None
-        zone = slot.place.zone if slot.place else None
+        # // используем уже полученную zone для создания бронирования
         booking = models.Booking(
             user_id=user_id,
             slot_id=slot.id,
