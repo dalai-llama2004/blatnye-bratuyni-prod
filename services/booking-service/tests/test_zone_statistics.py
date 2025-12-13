@@ -2,7 +2,7 @@
 Тесты для проверки статистики зон с текущей загрузкой.
 """
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import models
 import crud
@@ -22,7 +22,7 @@ async def test_zone_statistics_current_occupancy(test_session):
     test_session.add(place)
     await test_session.flush()
     
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     
     # Создаём 3 слота и брони:
     # 1. Прошлая бронь (завершена)
@@ -115,7 +115,7 @@ async def test_zone_statistics_with_closed_zone(test_session):
     active_zone = models.Zone(name="Активная зона", address="Адрес1", is_active=True)
     test_session.add(active_zone)
     
-    future_time = datetime.utcnow() + timedelta(days=1)
+    future_time = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=1)
     closed_zone = models.Zone(
         name="Закрытая зона",
         address="Адрес2",
@@ -158,7 +158,7 @@ async def test_zone_statistics_multiple_users_now(test_session):
     test_session.add_all([place1, place2])
     await test_session.flush()
     
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     
     # Создаём два текущих активных слота на разных местах
     slot1 = models.Slot(
@@ -222,7 +222,7 @@ async def test_zone_statistics_excludes_cancelled(test_session):
     test_session.add(place)
     await test_session.flush()
     
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     
     # Создаём текущий слот
     slot = models.Slot(

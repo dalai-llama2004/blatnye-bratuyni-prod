@@ -2,7 +2,7 @@
 Тесты для проверки функциональности закрытия зон и автоматического открытия.
 """
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import models
 import crud
@@ -22,7 +22,7 @@ async def test_close_zone_adds_cancellation_reason(test_session):
     test_session.add(place)
     await test_session.flush()
     
-    future_time = datetime.utcnow() + timedelta(days=1)
+    future_time = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=1)
     slot = models.Slot(
         place_id=place.id,
         start_time=future_time,
@@ -74,7 +74,7 @@ async def test_zone_auto_reactivation(test_session):
     Тест проверяет автоматическое открытие зоны после окончания времени закрытия.
     """
     # Создаём закрытую зону с истекшим временем закрытия
-    past_time = datetime.utcnow() - timedelta(hours=1)
+    past_time = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=1)
     zone = models.Zone(
         name="Закрытая зона",
         address="Адрес",
@@ -101,7 +101,7 @@ async def test_zone_not_reactivated_if_still_closed(test_session):
     Тест проверяет, что зона не открывается, если время закрытия ещё не истекло.
     """
     # Создаём закрытую зону с будущим временем закрытия
-    future_time = datetime.utcnow() + timedelta(hours=2)
+    future_time = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=2)
     zone = models.Zone(
         name="Закрытая зона",
         address="Адрес",
@@ -134,7 +134,7 @@ async def test_get_zones_include_inactive(test_session):
         address="Адрес2",
         is_active=False,
         closure_reason="Ремонт",
-        closed_until=datetime.utcnow() + timedelta(days=1),
+        closed_until=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=1),
     )
     test_session.add_all([active_zone, inactive_zone])
     await test_session.commit()
@@ -167,7 +167,7 @@ async def test_extend_booking_with_custom_time(test_session):
     await test_session.flush()
     
     # Создаём слот на завтра
-    base_time = datetime.utcnow() + timedelta(days=1)
+    base_time = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=1)
     slot = models.Slot(
         place_id=place.id,
         start_time=base_time,
@@ -232,7 +232,7 @@ async def test_extend_booking_respects_max_hours(test_session):
     await test_session.flush()
     
     # Создаём слот на максимально допустимое время минус 1 час
-    base_time = datetime.utcnow() + timedelta(days=1)
+    base_time = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=1)
     slot = models.Slot(
         place_id=place.id,
         start_time=base_time,

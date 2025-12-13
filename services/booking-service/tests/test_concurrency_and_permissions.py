@@ -81,7 +81,8 @@ async def test_duplicate_slot_creation_integrity_error(test_session):
     test_session.add(place)
     await test_session.flush()
     
-    start_time = datetime.now(timezone.utc) + timedelta(days=1)
+    # Используем фиксированное время с валидными минутами (кратными 5)
+    start_time = datetime.now(timezone.utc).replace(hour=10, minute=0, second=0, microsecond=0) + timedelta(days=1)
     end_time = start_time + timedelta(hours=2)
     
     # Создаём первое бронирование по времени
@@ -274,7 +275,8 @@ async def test_concurrent_slot_creation_same_time(test_session):
     test_session.add_all([place1, place2])
     await test_session.commit()
     
-    start_time = datetime.now(timezone.utc) + timedelta(days=1)
+    # Используем фиксированное время с валидными минутами (кратными 5)
+    start_time = datetime.now(timezone.utc).replace(hour=10, minute=0, second=0, microsecond=0) + timedelta(days=1)
     end_time = start_time + timedelta(hours=2)
     
     # Создаём бронирование для place1
