@@ -1,5 +1,6 @@
 import pytest
 import jwt
+import json
 from unittest.mock import patch, MagicMock
 from config import SECRET_KEY
 
@@ -240,7 +241,6 @@ def test_large_booking_history_response(test_client):
     with patch('routes.booking.requests.get') as mock_get:
         mock_response = MagicMock()
         mock_response.status_code = 200
-        import json
         mock_response.content = json.dumps(large_response).encode('utf-8')
         mock_response.headers = {'content-type': 'application/json'}
         mock_get.return_value = mock_response
