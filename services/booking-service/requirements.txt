@@ -10,6 +10,7 @@ psycopg2-binary
 python-jose[cryptography]
 pytest
 pytest-asyncio
+pytest-cov
 httpx
 aiosqlite
 pytz
