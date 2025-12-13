@@ -1,7 +1,6 @@
 import pytest
 from unittest.mock import patch, MagicMock
 import crud
-import models
 
 
 def test_notify_email_success(test_client):

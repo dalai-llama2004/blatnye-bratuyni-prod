@@ -1,6 +1,5 @@
 import pytest
 import crud
-import models
 
 
 def test_create_notification(test_db):
