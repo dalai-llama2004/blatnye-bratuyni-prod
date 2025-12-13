@@ -25,7 +25,7 @@ def test_send_email_success():
         
         result = send_email(notification)
         
-        assert result == True
+        assert result is True
         mock_server.send_message.assert_called_once()
 
 
@@ -42,4 +42,4 @@ def test_send_email_failure():
         
         result = send_email(notification)
         
-        assert result == False
+        assert result is False
