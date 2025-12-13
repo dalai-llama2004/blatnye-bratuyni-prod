@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr, ConfigDict
 from typing import List
+from datetime import datetime
 
 class NotificationCreate(BaseModel):
     email: EmailStr
@@ -28,4 +29,4 @@ class NotificationOut(BaseModel):
     title: str
     message: str
     sent: bool
-    created_at: str
+    created_at: datetime
