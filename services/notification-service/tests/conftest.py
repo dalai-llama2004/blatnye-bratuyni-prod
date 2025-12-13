@@ -23,10 +23,22 @@ def test_db():
     TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     
     db = TestSessionLocal()
+    
+    # Override the get_db dependency to use test database
+    from routes import get_db
+    def override_get_db():
+        try:
+            yield db
+        finally:
+            pass
+    
+    app.dependency_overrides[get_db] = override_get_db
+    
     try:
         yield db
     finally:
         db.close()
+        app.dependency_overrides.clear()
     
     Base.metadata.drop_all(bind=engine)
 

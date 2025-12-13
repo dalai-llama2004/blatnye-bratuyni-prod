@@ -1,5 +1,5 @@
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import models
 
@@ -31,7 +31,7 @@ async def test_get_global_statistics_with_bookings(test_client, test_session):
     await test_session.flush()
     
     # Создаем активное бронирование "прямо сейчас"
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     slot1 = models.Slot(
         place_id=place.id,
         start_time=now - timedelta(hours=1),
@@ -117,7 +117,7 @@ async def test_get_global_statistics_multiple_users_now(test_client, test_sessio
         await test_session.flush()
         places.append(place)
     
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     
     # Создаем активные бронирования для нескольких пользователей на разных местах
     for idx, user_id in enumerate([1, 2, 3]):
