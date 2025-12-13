@@ -17,7 +17,7 @@ def test_create_notification(test_db):
     assert notif.type == "info"
     assert notif.title == "Test Notification"
     assert notif.message == "Test message"
-    assert notif.sent == False
+    assert not notif.sent
 
 
 def test_get_unsent_notifs(test_db):
@@ -93,11 +93,11 @@ def test_mark_notification_sent(test_db):
         message="Test message"
     )
     
-    assert notif.sent == False
+    assert not notif.sent
     
     updated = crud.mark_notification_sent(test_db, notif.id)
     
-    assert updated.sent == True
+    assert updated.sent
 
 
 def test_mark_notification_sent_nonexistent(test_db):
